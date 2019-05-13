@@ -6,15 +6,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/dgrijalva/jwt-go"
-
-	"golang.org/x/crypto/bcrypt"
-
-	//"github.com/gorilla/mux"
-
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
+	"golang.org/x/crypto/bcrypt"
 )
 
 //User is an exportable struct
@@ -38,9 +35,6 @@ var db *sql.DB
 
 func main() {
 
-	//declare err here since we cannot declare it below with the short-hand declaration syntax
-	//that will give us an error because db is already decalred outside the var keyword, and it does not need to be
-	//to be re-declared.
 	var err error
 
 	// Connect to the Postgres Database
@@ -57,12 +51,6 @@ func main() {
 	router.HandleFunc("/signup", signup).Methods("POST")
 	router.HandleFunc("/login", login).Methods("POST")
 	router.HandleFunc("/protected", TokenVerifyMiddleware(protectedEndpoint)).Methods("GET")
-
-	// // // julienschmidt/httprouter
-	// router := httprouter.New()
-	// router.POST("/signup", signup)
-	// router.POST("/login", login)
-	// //router.GET("/protected", TokenVerifyMiddleware(protectedEndpoint))
 
 	log.Println("Listen on port 8000...")
 	log.Fatal(http.ListenAndServe(":8000", router))
@@ -117,6 +105,7 @@ func signup(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	responseJSON(w, user)
+	log.Printf("%s %s %v", r.URL, r.Method, r.Proto)
 }
 
 //GenerateToken is an exportable function
@@ -178,6 +167,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 
+	// this is the user.Password variable result of the DB query
 	hashedPassword := user.Password
 
 	err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
@@ -192,13 +182,54 @@ func login(w http.ResponseWriter, r *http.Request) {
 	jwt.Token = token
 
 	responseJSON(w, jwt)
+	log.Printf("%s %s %v", r.URL, r.Method, r.Proto)
 }
 
 func protectedEndpoint(w http.ResponseWriter, r *http.Request) {
-	//fmt.Println("protectedEndpoint invoked.")
+	fmt.Println("protectedEndpoint invoked.")
+	log.Printf("%s %s %v", r.URL, r.Method, r.Proto)
 }
 
+//TokenVerifyMiddleware will validate the token that was sent by the user giving access to the "protectedend point".  It takes "next" as an argument - it is triggered after the token is validated.
 func TokenVerifyMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	fmt.Println("TokenVerifyMiddleware invoked.")
-	return nil
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var errorObject Error
+
+		// this header should have a key/value pair called "Authorization". "authHeader" will grab the key
+		authHeader := r.Header.Get("Authorization")
+		// bearerToken will remove the empty space found on the value
+		bearerToken := strings.Split(authHeader, " ")
+
+		if len(bearerToken) == 2 {
+			// here we catch the value of bearerToken[1] leaving the word "bearer" out.
+			authToken := bearerToken[1]
+
+			// to make sure the token is valid we use jwt.Parse
+			token, error := jwt.Parse(authToken, func(token *jwt.Token) (interface{}, error) {
+				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, fmt.Errorf("There was an error")
+				}
+				return []byte("secret"), nil
+			})
+
+			if error != nil {
+				errorObject.Message = error.Error()
+				respondWithError(w, http.StatusUnauthorized, errorObject)
+				return
+			}
+
+			// if the token is valid, next will call the next function which is "protectedEndpoint"
+			if token.Valid {
+				next.ServeHTTP(w, r)
+			} else {
+				errorObject.Message = error.Error()
+				respondWithError(w, http.StatusUnauthorized, errorObject)
+				return
+			}
+		} else {
+			errorObject.Message = "Invalid token."
+			respondWithError(w, http.StatusUnauthorized, errorObject)
+			return
+		}
+	})
 }
