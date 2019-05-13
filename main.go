@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/dgrijalva/jwt-go"
+
 	"golang.org/x/crypto/bcrypt"
 
 	//"github.com/gorilla/mux"
@@ -105,7 +107,6 @@ func signup(w http.ResponseWriter, r *http.Request) {
 	stmt := "insert into users (email, password) values($1, $2) RETURNING id;"
 
 	err = db.QueryRow(stmt, user.Email, user.Password).Scan(&user.ID)
-
 	if err != nil {
 		error.Message = "Server error."
 		respondWithError(w, http.StatusInternalServerError, error)
@@ -118,9 +119,79 @@ func signup(w http.ResponseWriter, r *http.Request) {
 	responseJSON(w, user)
 }
 
+//GenerateToken is an exportable function
+func GenerateToken(user User) (string, error) {
+	var err error
+	secret := "secret"
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"email": user.Email,
+		"iss":   "course",
+	})
+
+	tokenString, err := token.SignedString([]byte(secret))
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return tokenString, nil
+}
+
 func login(w http.ResponseWriter, r *http.Request) {
-	//fmt.Println("login invoked.")
-	w.Write([]byte("Acesso ao login!"))
+	var user User
+	var jwt JWT
+	var error Error
+
+	json.NewDecoder(r.Body).Decode(&user)
+
+	if user.Email == "" {
+		error.Message = "Email missing"
+		respondWithError(w, http.StatusBadRequest, error)
+		return
+	}
+
+	if user.Password == "" {
+		error.Message = "Password missing"
+		respondWithError(w, http.StatusBadRequest, error)
+		return
+	}
+
+	//This varialbe will provided by the user when login
+	password := user.Password
+
+	// Check the database if the provided user exists in the table
+	row := db.QueryRow("select * from users where email=$1;", user.Email)
+	err := row.Scan(&user.ID, &user.Email, &user.Password)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			error.Message = "The user does not exists"
+			respondWithError(w, http.StatusBadRequest, error)
+			return
+		} else {
+			log.Fatal(err)
+		}
+	}
+
+	token, err := GenerateToken(user)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	hashedPassword := user.Password
+
+	err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
+	if err != nil {
+		error.Message = "Invalid Password"
+		respondWithError(w, http.StatusUnauthorized, error)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+
+	jwt.Token = token
+
+	responseJSON(w, jwt)
 }
 
 func protectedEndpoint(w http.ResponseWriter, r *http.Request) {
