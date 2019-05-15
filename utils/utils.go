@@ -5,7 +5,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/user/rest_api_jwt/models"
+	"github.com/dgrijalva/jwt-go"
+	"github.com/user/REST_API_JWT/models"
 )
 
 //RespondWithError will be exported
@@ -26,4 +27,23 @@ func Logging(f http.HandlerFunc) http.HandlerFunc {
 		log.Printf("%s %s %v", r.URL, r.Method, r.Proto)
 		f(w, r)
 	}
+}
+
+//GenerateToken is an exportable function
+func GenerateToken(user models.User) (string, error) {
+	var err error
+	secret := "secret"
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"email": user.Email,
+		"iss":   "course",
+	})
+
+	tokenString, err := token.SignedString([]byte(secret))
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return tokenString, nil
 }
