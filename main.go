@@ -13,6 +13,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/user/rest_api_jwt/driver"
 	"github.com/user/rest_api_jwt/models"
+	"github.com/user/rest_api_jwt/utils"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -24,31 +25,13 @@ func main() {
 
 	// gorilla/mux
 	router := mux.NewRouter()
-	router.HandleFunc("/signup", logging(signup)).Methods("POST")
-	router.HandleFunc("/login", logging(login)).Methods("POST")
-	router.HandleFunc("/protected", TokenVerifyMiddleware(logging(protectedEndpoint))).Methods("GET")
+	router.HandleFunc("/signup", utils.Logging(signup)).Methods("POST")
+	router.HandleFunc("/login", utils.Logging(login)).Methods("POST")
+	router.HandleFunc("/protected", TokenVerifyMiddleware(utils.Logging(protectedEndpoint))).Methods("GET")
 
 	log.Println("Listen on port 8000...")
 	log.Fatal(http.ListenAndServe(":8000", router))
 
-}
-
-func respondWithError(w http.ResponseWriter, status int, error models.Error) {
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(error)
-	return
-}
-
-func responseJSON(w http.ResponseWriter, data interface{}) {
-	json.NewEncoder(w).Encode(data)
-}
-
-// Com essa função emitimos um log para o terminal informanto status do servidor. Para cada handler do mux precisa passar essa função que tem como argumento as demais funções de handler.
-func logging(f http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s %v", r.URL, r.Method, r.Proto)
-		f(w, r)
-	}
 }
 
 func signup(w http.ResponseWriter, r *http.Request) {
@@ -59,12 +42,12 @@ func signup(w http.ResponseWriter, r *http.Request) {
 
 	if user.Email == "" {
 		error.Message = "Favor inserir um e-mail válido"
-		respondWithError(w, http.StatusBadRequest, error)
+		utils.RespondWithError(w, http.StatusBadRequest, error)
 		return
 	}
 	if user.Password == "" {
 		error.Message = "Favor inserir uma senha válida"
-		respondWithError(w, http.StatusBadRequest, error)
+		utils.RespondWithError(w, http.StatusBadRequest, error)
 		return
 	}
 
@@ -81,14 +64,14 @@ func signup(w http.ResponseWriter, r *http.Request) {
 	err = db.QueryRow(stmt, user.Email, user.Password).Scan(&user.ID)
 	if err != nil {
 		error.Message = "Server error."
-		respondWithError(w, http.StatusInternalServerError, error)
+		utils.RespondWithError(w, http.StatusInternalServerError, error)
 		return
 	}
 
 	user.Password = ""
 
 	w.Header().Set("Content-Type", "application/json")
-	responseJSON(w, user)
+	utils.ResponseJSON(w, user)
 }
 
 //GenerateToken is an exportable function
@@ -119,13 +102,13 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	if user.Email == "" {
 		error.Message = "Email missing"
-		respondWithError(w, http.StatusBadRequest, error)
+		utils.RespondWithError(w, http.StatusBadRequest, error)
 		return
 	}
 
 	if user.Password == "" {
 		error.Message = "Password missing"
-		respondWithError(w, http.StatusBadRequest, error)
+		utils.RespondWithError(w, http.StatusBadRequest, error)
 		return
 	}
 
@@ -138,7 +121,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if err == sql.ErrNoRows {
 			error.Message = "The user does not exists"
-			respondWithError(w, http.StatusBadRequest, error)
+			utils.RespondWithError(w, http.StatusBadRequest, error)
 			return
 		} else {
 			log.Fatal(err)
@@ -156,7 +139,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 	err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
 	if err != nil {
 		error.Message = "Invalid Password"
-		respondWithError(w, http.StatusUnauthorized, error)
+		utils.RespondWithError(w, http.StatusUnauthorized, error)
 		return
 	}
 
@@ -164,7 +147,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	jwt.Token = token
 
-	responseJSON(w, jwt)
+	utils.ResponseJSON(w, jwt)
 }
 
 func protectedEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +178,7 @@ func TokenVerifyMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 			if error != nil {
 				errorObject.Message = error.Error()
-				respondWithError(w, http.StatusUnauthorized, errorObject)
+				utils.RespondWithError(w, http.StatusUnauthorized, errorObject)
 				return
 			}
 
@@ -204,12 +187,12 @@ func TokenVerifyMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				next.ServeHTTP(w, r)
 			} else {
 				errorObject.Message = error.Error()
-				respondWithError(w, http.StatusUnauthorized, errorObject)
+				utils.RespondWithError(w, http.StatusUnauthorized, errorObject)
 				return
 			}
 		} else {
 			errorObject.Message = "Invalid token."
-			respondWithError(w, http.StatusUnauthorized, errorObject)
+			utils.RespondWithError(w, http.StatusUnauthorized, errorObject)
 			return
 		}
 	})
