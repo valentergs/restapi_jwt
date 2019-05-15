@@ -67,9 +67,11 @@ func responseJSON(w http.ResponseWriter, data interface{}) {
 	json.NewEncoder(w).Encode(data)
 }
 
+// Com essa função emitimos um log para o terminal informanto status do servidor. Para cada handler do mux precisa passar essa função que tem como argumento as demais funções de handler.
 func logging(f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("%s %s %v", r.URL, r.Method, r.Proto)
+		f(w, r)
 	}
 }
 
