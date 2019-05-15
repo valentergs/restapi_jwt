@@ -48,9 +48,9 @@ func main() {
 
 	// gorilla/mux
 	router := mux.NewRouter()
-	router.HandleFunc("/signup", signup).Methods("POST")
-	router.HandleFunc("/login", login).Methods("POST")
-	router.HandleFunc("/protected", TokenVerifyMiddleware(protectedEndpoint)).Methods("GET")
+	router.HandleFunc("/signup", logging(signup)).Methods("POST")
+	router.HandleFunc("/login", logging(login)).Methods("POST")
+	router.HandleFunc("/protected", TokenVerifyMiddleware(logging(protectedEndpoint))).Methods("GET")
 
 	log.Println("Listen on port 8000...")
 	log.Fatal(http.ListenAndServe(":8000", router))
@@ -65,6 +65,12 @@ func respondWithError(w http.ResponseWriter, status int, error Error) {
 
 func responseJSON(w http.ResponseWriter, data interface{}) {
 	json.NewEncoder(w).Encode(data)
+}
+
+func logging(f http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%s %s %v", r.URL, r.Method, r.Proto)
+	}
 }
 
 func signup(w http.ResponseWriter, r *http.Request) {
@@ -105,7 +111,6 @@ func signup(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	responseJSON(w, user)
-	log.Printf("%s %s %v", r.URL, r.Method, r.Proto)
 }
 
 //GenerateToken is an exportable function
@@ -182,12 +187,10 @@ func login(w http.ResponseWriter, r *http.Request) {
 	jwt.Token = token
 
 	responseJSON(w, jwt)
-	log.Printf("%s %s %v", r.URL, r.Method, r.Proto)
 }
 
 func protectedEndpoint(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("protectedEndpoint invoked.")
-	log.Printf("%s %s %v", r.URL, r.Method, r.Proto)
 }
 
 //TokenVerifyMiddleware will validate the token that was sent by the user giving access to the "protectedend point".  It takes "next" as an argument - it is triggered after the token is validated.
