@@ -11,40 +11,16 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
+	"github.com/user/rest_api_jwt/driver"
+	"github.com/user/rest_api_jwt/models"
 	"golang.org/x/crypto/bcrypt"
 )
-
-//User is an exportable struct
-type User struct {
-	ID       int    `json:"id"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
-//JWT is an exportable struct
-type JWT struct {
-	Token string `json:"token"`
-}
-
-//Error is an exportable struct
-type Error struct {
-	Message string `json:"message"`
-}
 
 var db *sql.DB
 
 func main() {
 
-	var err error
-
-	// Connect to the Postgres Database
-	db, err = sql.Open("postgres", "user=rodrigovalente password=password host=localhost port=5432 dbname=api_jwt sslmode=disable")
-
-	if err != nil {
-		panic(err)
-	}
-	// Close the connection
-	defer db.Close()
+	db = driver.ConnectDB()
 
 	// gorilla/mux
 	router := mux.NewRouter()
@@ -57,7 +33,7 @@ func main() {
 
 }
 
-func respondWithError(w http.ResponseWriter, status int, error Error) {
+func respondWithError(w http.ResponseWriter, status int, error models.Error) {
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(error)
 	return
@@ -76,8 +52,8 @@ func logging(f http.HandlerFunc) http.HandlerFunc {
 }
 
 func signup(w http.ResponseWriter, r *http.Request) {
-	var user User
-	var error Error
+	var user models.User
+	var error models.Error
 
 	json.NewDecoder(r.Body).Decode(&user)
 
@@ -116,7 +92,7 @@ func signup(w http.ResponseWriter, r *http.Request) {
 }
 
 //GenerateToken is an exportable function
-func GenerateToken(user User) (string, error) {
+func GenerateToken(user models.User) (string, error) {
 	var err error
 	secret := "secret"
 
@@ -135,9 +111,9 @@ func GenerateToken(user User) (string, error) {
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
-	var user User
-	var jwt JWT
-	var error Error
+	var user models.User
+	var jwt models.JWT
+	var error models.Error
 
 	json.NewDecoder(r.Body).Decode(&user)
 
@@ -198,7 +174,7 @@ func protectedEndpoint(w http.ResponseWriter, r *http.Request) {
 //TokenVerifyMiddleware will validate the token that was sent by the user giving access to the "protectedend point".  It takes "next" as an argument - it is triggered after the token is validated.
 func TokenVerifyMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var errorObject Error
+		var errorObject models.Error
 
 		// this header should have a key/value pair called "Authorization". "authHeader" will grab the key
 		authHeader := r.Header.Get("Authorization")
