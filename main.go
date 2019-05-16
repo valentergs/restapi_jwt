@@ -18,11 +18,12 @@ var db *sql.DB
 func main() {
 
 	db = driver.ConnectDB()
+	controller := controllers.Controller{}
 
 	// gorilla/mux
 	router := mux.NewRouter()
-	router.HandleFunc("/signup", utils.Logging(controllers.Signup)).Methods("POST")
-	router.HandleFunc("/login", utils.Logging(controllers.Login)).Methods("POST")
+	router.HandleFunc("/signup", utils.Logging(controller.Signup(db))).Methods("POST")
+	router.HandleFunc("/login", utils.Logging(controller.Login(db))).Methods("POST")
 	router.HandleFunc("/protected", middlewares.TokenVerifyMiddleware(utils.Logging(controllers.ProtectedEndpoint))).Methods("GET")
 
 	log.Println("Listen on port 8000...")
